@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zehnfinger</title>
+<meta name="description" content="Zehnfinger-System lernen: Tipptrainer mit Schweizer Tastatur, auch offline nutzbar.">
+<meta name="theme-color" content="#f5f3ee">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="data.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <button class="brand" id="brand" aria-label="Zur Übersicht">
+    <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    Zehnfinger
+  </button>
+  <button class="chip install" id="installBtn" hidden>⬇ App installieren</button>
+  <div class="chip" title="Tage hintereinander geübt"><span class="ico">🔥</span><span id="streak">0 Tage</span></div>
+  <div class="chip" title="Tagesziel">
+    <svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="bgc" cx="18" cy="18" r="15"/><circle class="fgc" id="goalRing" cx="18" cy="18" r="15" stroke-dasharray="94.25" stroke-dashoffset="94.25"/></svg>
+    <span id="goalText">0 / 10 Min.</span>
+  </div>
+</header>
+
+<!-- ============ ÜBERSICHT ============ -->
+<main id="view-home">
+  <p class="note mobile-note">Tipp: Zehnfinger funktioniert am besten am Computer mit einer echten Tastatur.</p>
+  <p class="banner" id="storageWarn" hidden>Dieser Browser erlaubt kein Speichern. Der Fortschritt geht beim Schliessen verloren. Bitte kein privates Fenster verwenden.</p>
+  <section class="card hero">
+    <div>
+      <h1 id="heroTitle">Bereit?</h1>
+      <p id="heroSub">Zeigefinger auf F und J, dann geht's los.</p>
+    </div>
+    <button class="btn primary" id="heroBtn">Weiter üben ▸</button>
+  </section>
+
+  <h2>Lektionen</h2>
+  <div class="lessons" id="lessons"></div>
+
+  <h2>Freies Training</h2>
+  <div class="free">
+    <div class="card">
+      <h3>🗨️ Ganze Sätze</h3>
+      <p>Zufällige Sätze aus Schule, Sport und Alltag. Zählt nicht für die Sterne.</p>
+      <button class="btn small" id="freeSentences">Sätze üben</button>
+    </div>
+    <div class="card">
+      <h3>🎯 Problemtasten</h3>
+      <p id="problemDesc">Erscheint, sobald du ein paar Übungen gemacht hast.</p>
+      <button class="btn small" id="freeProblem" disabled>Gezielt üben</button>
+    </div>
+    <div class="card">
+      <h3>✏️ Eigener Text</h3>
+      <p>Text einfügen, zum Beispiel Wörter für die nächste Prüfung.</p>
+      <textarea id="customText" placeholder="Hier einen Text einfügen …"></textarea>
+      <p class="note" id="customNote" hidden></p>
+      <button class="btn small" id="freeCustom">Mit diesem Text üben</button>
+    </div>
+  </div>
+
+  <h2>Dein Fortschritt</h2>
+  <div class="tiles">
+    <div class="card tile"><div class="v" id="tBest">–</div><div class="l">Bestes Tempo<br>(Anschläge pro Minute)</div></div>
+    <div class="card tile"><div class="v" id="tAcc">–</div><div class="l">Genauigkeit<br>(letzte 10 Übungen)</div></div>
+    <div class="card tile"><div class="v" id="tTime">0 Min.</div><div class="l">Übungszeit<br>insgesamt</div></div>
+    <div class="card tile"><div class="v" id="tStars">0</div><div class="l">Sterne<br>gesammelt</div></div>
+  </div>
+  <div class="card chart">
+    <h3>Tempo der letzten Übungen</h3>
+    <div id="chart"></div>
+  </div>
+  <div class="card backup" id="backupCard">
+    <div>
+      <h3>💾 Sicherung</h3>
+      <p id="backupInfo">Noch keine Sicherung.</p>
+      <p class="note" id="backupMsg" hidden></p>
+    </div>
+    <div class="backup-actions">
+      <button class="btn small" id="backupExport">Fortschritt sichern</button>
+      <button class="btn small" id="backupImport">Sicherung laden</button>
+      <input type="file" id="backupFile" accept="application/json,.json" hidden>
+    </div>
+  </div>
+
+  <h2>Abzeichen</h2>
+  <div class="badges" id="badges"></div>
+
+  <h2>So lernst du am schnellsten</h2>
+  <div class="card tips">
+    <ul>
+      <li>Zeigefinger auf <kbd>F</kbd> und <kbd>J</kbd>. Die kleinen Rillen spürst du, ohne hinzuschauen.</li>
+      <li>Nicht auf die Tasten schauen. Die farbige Tastatur am Bildschirm zeigt dir, welcher Finger dran ist.</li>
+      <li>Genau vor schnell: Sterne gibt es für wenige Fehler, nicht für Tempo. Das Tempo kommt von allein.</li>
+      <li>Lieber jeden Tag 10 Minuten als einmal pro Woche eine Stunde.</li>
+      <li>Gerade sitzen, Handgelenke locker, die Daumen ruhen auf der Leertaste.</li>
+    </ul>
+  </div>
+
+  <h2>Einstellungen</h2>
+  <details class="card settings">
+    <summary>Einstellungen öffnen</summary>
+    <div class="set-row"><label for="setGoal">Tagesziel</label>
+      <select id="setGoal"><option value="5">5 Minuten</option><option value="10">10 Minuten</option><option value="15">15 Minuten</option><option value="20">20 Minuten</option></select></div>
+    <div class="set-row"><label for="setHands">Hände unter der Tastatur anzeigen</label><input type="checkbox" id="setHands"></div>
+    <div class="set-row"><label for="setSound">Leiser Ton bei Fehlern</label><input type="checkbox" id="setSound"></div>
+    <div class="set-row"><label for="setUnlock">Alle Lektionen freischalten</label><input type="checkbox" id="setUnlock"></div>
+    <div class="set-row"><span class="note">Der Fortschritt wird in diesem Browser auf diesem Gerät gespeichert. Mit «Fortschritt sichern» nimmst du ihn mit.</span><button class="btn small" id="setReset">Zurücksetzen</button></div>
+  </details>
+
+  <footer class="foot">Zehnfinger · Version <span id="appVersion"></span> · <span id="offlineState">offline-Modus wird vorbereitet …</span></footer>
+</main>
+
+<!-- ============ TRAINING ============ -->
+<main id="view-train" hidden>
+  <div class="trainbar">
+    <button class="btn small" id="trainBack">← Übersicht</button>
+    <span class="title" id="trainTitle"></span>
+    <span class="pill">Tempo <b id="liveApm">–</b></span>
+    <span class="pill">Fehler <b id="liveErr">0</b></span>
+  </div>
+  <div class="progress"><i id="liveProg"></i></div>
+  <div class="banner" id="layoutBanner" hidden>
+    <span>Die Tastatur scheint nicht auf <b>Deutsch (Schweiz)</b> eingestellt zu sein: Y und Z sind vertauscht. In Windows unten rechts auf «DEU» bzw. «DES» klicken und «Deutsch (Schweiz)» wählen.</span>
+    <button class="btn small" id="layoutClose">OK</button>
+  </div>
+  <div class="start-hint" id="startHint">Finger auf die Grundreihe, dann einfach lostippen.</div>
+  <div class="text" id="text" aria-live="off"></div>
+  <div class="hint" id="hint"></div>
+  <div class="kb" id="kb" aria-hidden="true"></div>
+  <svg class="hands" id="hands" viewBox="0 0 460 170" aria-hidden="true"></svg>
+  <p class="esc-note"><kbd>Esc</kbd> bricht die Übung ab.</p>
+</main>
+
+<!-- ============ RESULTAT ============ -->
+<main id="view-result" hidden>
+  <section class="card result">
+    <div class="bigstars" id="rStars"></div>
+    <h1 id="rTitle"></h1>
+    <p class="msg" id="rMsg"></p>
+    <div class="rstats">
+      <div><b id="rApm"></b><span>Anschläge / Min.</span></div>
+      <div><b id="rAcc"></b><span>Genauigkeit</span></div>
+      <div><b id="rErr"></b><span>Fehler</span></div>
+      <div><b id="rTime"></b><span>Zeit</span></div>
+    </div>
+    <div class="rextra" id="rExtra"></div>
+    <div class="ractions">
+      <button class="btn" id="rHome">Übersicht</button>
+      <button class="btn" id="rAgain">Nochmal</button>
+      <button class="btn primary" id="rNext">Nächste Lektion ▸</button>
+    </div>
+    <p class="note" style="margin-top:14px"><kbd>Enter</kbd> = farbiger Knopf</p>
+  </section>
+</main>
+
+</div>
+</body>
+</html>
