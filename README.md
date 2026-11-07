@@ -1,6 +1,6 @@
 # Zehnfinger
 
-Tipptrainer für das Zehnfinger-System mit **Schweizer Tastatur**, gemacht für Kinder ab etwa 10 Jahren.
+Tipptrainer für das Zehnfinger-System mit **Schweizer Tastatur**, gemacht für Lernende an Berufsschulen.
 
 **Online:** https://aburossi.github.io/zehnfinger/
 
