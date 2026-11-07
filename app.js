@@ -1,5 +1,14 @@
 "use strict";
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.2.0";
+
+/* ---------- Einbettung im Lernportal ----------
+   Läuft die App als iframe mit ?embed=1, speichert sie nichts im Browser, sondern meldet jede Übung und den
+   Stand an die Elternseite (gleicher Ursprung) und holt den Stand beim Start von dort. So gehört der Fortschritt
+   der angemeldeten Person und nicht dem Gerät. Die App kennt keine Namen: wer es ist, weiss nur die Elternseite.
+   Ohne ?embed=1 (GitHub Pages, lokale Datei) ändert sich nichts. */
+const EMBED = window.parent !== window && new URLSearchParams(location.search).get("embed") === "1";
+const HOST_MSG = "zehnfinger";
+const toHost = msg => { try { window.parent.postMessage({ source:HOST_MSG, v:1, ...msg }, location.origin); } catch (e) {} };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -147,8 +156,12 @@ function load() {
   } catch (e) { storageOk = false; }
   return defaults();
 }
-let data = load();
-function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { storageOk = false; } }
+let data = EMBED ? defaults() : load();
+let statePostTimer = 0;
+function save() {
+  if (EMBED) { clearTimeout(statePostTimer); statePostTimer = setTimeout(() => toHost({ type:"state", state:data }), 400); return; }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { storageOk = false; }
+}
 
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function streak() {
@@ -159,7 +172,8 @@ function streak() {
 }
 const starsOf = n => (data.lessons[n] && data.lessons[n].stars) || 0;
 const totalStars = () => Object.values(data.lessons).reduce((a, r) => a + (r.stars || 0), 0);
-const isUnlocked = idx => idx === 0 || data.settings.unlockAll || starsOf(LESSONS[idx - 1].n) >= 1;
+// Im Lernportal gibt es keine Abkürzung: die nächste Lektion öffnet sich erst mit 90 % Genauigkeit.
+const isUnlocked = idx => idx === 0 || (data.settings.unlockAll && !EMBED) || starsOf(LESSONS[idx - 1].n) >= 1;
 const starsFor = acc => acc >= 98 ? 3 : acc >= 95 ? 2 : acc >= 90 ? 1 : 0;
 // Nur Übungen mit mindestens 15 Sekunden und 80 Zeichen zählen fürs Tempo, sonst verfälschen Mini-Texte die Rekorde.
 const bestApm = () => data.history.filter(h => h.acc >= 90 && h.ms >= 15000 && h.chars >= 80).reduce((m, h) => Math.max(m, h.apm), 0);
@@ -184,11 +198,25 @@ const BADGES = [
   { id:"stars30", icon:"⭐", name:"Sternensammler",     desc:"30 Sterne gesammelt",              check:c => c.stars >= 30 },
   { id:"apm150",  icon:"🏎️", name:"Turbo",              desc:"150 Anschläge pro Minute",         check:c => c.best >= 150 },
   { id:"apm200",  icon:"🛸", name:"Überschall",         desc:"200 Anschläge pro Minute",         check:c => c.best >= 200 },
+  { id:"apm250",  icon:"🚀", name:"Raketenstart",       desc:"250 Anschläge pro Minute",         check:c => c.best >= 250 },
+  // Genauigkeit: nur Übungen ab 80 Zeichen zählen, sonst sind Mini-Texte zu leicht.
+  { id:"acc95x3", icon:"🎯", name:"Sauber",             desc:"3 Übungen hintereinander mit 95 % Genauigkeit", check:c => c.run3 >= 95 },
+  { id:"acc98",   icon:"💎", name:"Präzise",            desc:"Eine Übung mit 98 % Genauigkeit (ab 150 Zeichen)", check:c => c.long98 },
+  { id:"clean3",  icon:"🧼", name:"Makellos",           desc:"3 Übungen hintereinander ganz ohne Fehler", check:c => c.clean3 },
+  { id:"fastclean", icon:"🏅", name:"Schnell und genau", desc:"150 Anschläge pro Minute bei 98 % Genauigkeit", check:c => c.fastClean },
   { id:"master",  icon:"🎓", name:"Zehnfinger-Profi",   desc:"Alle 17 Lektionen geschafft",      check:() => LESSONS.every(L => starsOf(L.n) >= 1) }
 ];
+// Zählt fürs Tempo und die Genauigkeit: lang genug (80 Zeichen) und mindestens 15 Sekunden.
+const countsForBadge = h => h.chars >= 80 && h.ms >= 15000;
 function checkBadges() {
+  // Die drei letzten zählenden Übungen: reihen sich Fehler ein, ist die Serie unterbrochen.
+  const last3 = data.history.filter(countsForBadge).slice(-3);
   const ctx = { runs:data.history.length, best:bestApm(), streak:streak(), stars:totalStars(), ms:totalMs(),
-    clean: data.history.some(h => h.errors === 0 && h.chars >= 80) };
+    clean: data.history.some(h => h.errors === 0 && h.chars >= 80),
+    run3: last3.length === 3 ? Math.min(...last3.map(h => h.acc)) : 0,
+    clean3: last3.length === 3 && last3.every(h => h.errors === 0),
+    long98: data.history.some(h => countsForBadge(h) && h.chars >= 150 && h.acc >= 98),
+    fastClean: data.history.some(h => countsForBadge(h) && h.apm >= 150 && h.acc >= 98) };
   const got = [];
   for (const b of BADGES) if (!data.badges[b.id] && b.check(ctx)) { data.badges[b.id] = Date.now(); got.push(b); }
   return got;
@@ -496,16 +524,21 @@ function finishRun() {
   recordTime();
   data.history.push({ t:Date.now(), mode:cfg.mode, lesson:cfg.mode === "lesson" ? LESSONS[cfg.idx].n : null, apm, acc, ms:Math.round(run.active), chars, errors:run.errors });
   if (data.history.length > 300) data.history.splice(0, data.history.length - 300);
-  let prevStars = 0;
+  let prevStars = 0, bestApmBefore = 0;
   if (cfg.mode === "lesson") {
     const n = LESSONS[cfg.idx].n;
     const rec = data.lessons[n] || { stars:0, bestApm:0, bestAcc:0, runs:0 };
-    prevStars = rec.stars;
+    prevStars = rec.stars; bestApmBefore = rec.bestApm;
     rec.runs++; rec.stars = Math.max(rec.stars, stars); rec.bestApm = Math.max(rec.bestApm, apm); rec.bestAcc = Math.max(rec.bestAcc, acc);
     data.lessons[n] = rec;
   }
   const newBadges = checkBadges();
   save();
+  if (EMBED) {
+    const last = data.history[data.history.length - 1], lessonRun = cfg.mode === "lesson";
+    toHost({ type:"run", run:{ t:last.t, ms:last.ms, acc:last.acc, apm:last.apm, chars:last.chars, errors:last.errors, lesson:last.lesson,
+      ...(lessonRun ? { starsBefore:prevStars, starsAfter:data.lessons[last.lesson].stars, bestApmBefore } : {}) } });
+  }
   // Browser bitten, den Speicher nicht automatisch aufzuräumen.
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   renderResult({ cfg, apm, acc, stars, errors:run.errors, ms:run.active, prevStars, newBadges, wrong:run.wrong });
@@ -613,7 +646,9 @@ $("#installBtn").onclick = async () => {
 };
 
 $("#appVersion").textContent = APP_VERSION;
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+if (EMBED) {
+  $("#offlineState").textContent = "im Lernportal";
+} else if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   navigator.serviceWorker.register("./sw.js")
     .then(() => navigator.serviceWorker.ready)
     .then(() => { $("#offlineState").textContent = "auch offline nutzbar ✓"; })
@@ -622,6 +657,41 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   $("#offlineState").textContent = "lokale Datei";
 }
 
-buildKeyboard();
-buildHands();
-show("home");
+/* ---------- Start ---------- */
+function boot() { buildKeyboard(); buildHands(); show("home"); }
+function hostProblem(text) {
+  let box = document.getElementById("hostProblem");
+  if (!box) {
+    box = document.createElement("p"); box.id = "hostProblem";
+    box.style.cssText = "margin:24px;padding:16px;border:1px solid #b33027;font:16px/1.4 system-ui,sans-serif";
+    document.body.prepend(box);
+  }
+  box.textContent = text;
+}
+if (EMBED) {
+  // Eingebettet: kein Speichern auf dem Gerät, keine Abkürzungen, keine Sicherung, kein Installieren.
+  for (const sel of ["#backupCard", "#installBtn", "#setUnlock", "#setReset"]) {
+    const el = $(sel), row = el && (el.closest(".set-row") || el);
+    if (row) row.style.display = "none";
+  }
+  let started = false;
+  const start = state => {
+    if (started) return; started = true;
+    if (state && typeof state === "object" && state.lessons && Array.isArray(state.history)) data = merge(state);
+    boot();
+  };
+  window.addEventListener("message", e => {
+    if (e.origin !== location.origin || e.source !== window.parent) return;
+    const m = e.data;
+    if (m && m.source === "zehnfinger-host" && m.type === "init") start(m.state);
+    if (m && m.source === "zehnfinger-host" && m.type === "init-error") {
+      hostProblem("Dein Fortschritt konnte nicht geladen werden. Lade die Seite neu. Solange das nicht klappt, bleibt die Übung gesperrt, damit nichts überschrieben wird.");
+    }
+  });
+  toHost({ type:"ready" });
+  // Meldet sich die Elternseite nicht, startet die App NICHT leer: ein leerer Start würde beim
+  // ersten Speichern den echten Fortschritt überschreiben.
+  setTimeout(() => { if (!started) hostProblem("Der Fortschritt wird noch geladen. Dauert es lange, lade die Seite neu."); }, 15000);
+} else {
+  boot();
+}
