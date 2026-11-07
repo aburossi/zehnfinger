@@ -53,7 +53,7 @@ const SENTENCES = [
   "Das Konto prüfe ich monatlich in der App.",
   "Nach der Lehre will ich vielleicht noch die Berufsmatura machen.",
   "Die Hausordnung in der WG haben wir gemeinsam geschrieben.",
-  "Am Fitnessplan arbeite ich jeden zweiten Tag.",
+  "Ins Fitnesscenter gehe ich jeden zweiten Tag.",
   "Im Praktikum habe ich viel für den Beruf gelernt.",
   "Der Zug hat eine Umleitung wegen der Baustelle.",
   "Im Kino gibt es diesen Herbst ein paar gute Filme.",
@@ -67,13 +67,13 @@ const SENTENCES = [
     "Am Dienstag habe ich einen Kontrolltermin beim Arzt.",
     "Wir treffen uns am Eingang vom Hauptbahnhof.",
     "Am Nachmittag gehe ich einkaufen für die WG.",
-    "Ueberstunden gleiche ich im nächsten Monat aus.",
+    "Die Mehrstunden gleiche ich im nächsten Monat aus.",
     "Im Winter fahre ich mit Freunden mit dem Zug in die Berge."
 ];
 
 const NUM_SENTENCES = [
   "Der Lohn beträgt 4200 Franken im Monat.",
-  "Die Prämie kostet 320 Franken pro Quartal.",
+  "Die Prämie kostet 320 Franken im Monat.",
   "Ab 8 Uhr bin ich im Betrieb.",
   "Der Zug fährt um 17.42 Uhr ab.",
   "Die Fahrt dauert 35 Minuten.",
@@ -84,14 +84,14 @@ const NUM_SENTENCES = [
   "Die Wohnung hat 65 Quadratmeter.",
   "Das Konto ist mit 840 Franken im Minus.",
   "Bis zur Prüfung sind es noch 34 Tage.",
-  "Die Spesen betragen 210 Franken Auslagen.",
+  "Die Spesen für die Reise betragen 210 Franken.",
   "Die Verspätung beträgt 12 Minuten.",
   "Die Lehrstelle ist 3 Kilometer entfernt."
 ];
 
 const PUNCT_SENTENCES = [
   "Hast du die E-Mail schon beantwortet? Ja, sofort!",
-  "Bitte den Bericht bis Freitag abgeben: Frist ist Freitag.",
+  "Bitte den Bericht abgeben: Die Frist ist am Freitag.",
   "Achtung: Die Aufgaben zählen für die Note!",
   "Wie war dein erster Tag? Super, aber anstrengend!",
   "Termine: Montag 8 Uhr, Mittwoch 13.30 Uhr, Freitag frei.",
