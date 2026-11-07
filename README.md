@@ -20,9 +20,24 @@ Tipptrainer für das Zehnfinger-System mit **Schweizer Tastatur**, gemacht für 
 | `index.html` | Seitengerüst |
 | `style.css` | Aussehen, helles und dunkles Farbschema |
 | `data.js` | Wörter, Sätze, Lektionen, hier Inhalte ergänzen |
-| `app.js` | Logik: Tastatur, Übungen, Speicher, Sicherung |
+| `logic.js` | DOM-freie Tastatur-, Text- und Fortschrittslogik, auch in Node ladbar |
+| `app.js` | Oberfläche, Training, Browser-Speicher, Sicherung und Lernportal-Anbindung |
+| `tests/` | Tests mit dem eingebauten Node-Testläufer |
 | `sw.js` | Offline-Modus (Service Worker) |
 | `manifest.webmanifest`, `icons/` | Installation als App |
+
+## Tests
+
+Mit Node.js (ohne Installation von Abhängigkeiten) aus der Projektwurzel:
+
+```sh
+node --test tests/
+```
+
+Geprüft werden Schweizer Fingerzuordnung, erlaubte Zeichen und Texterzeugung aller Lektionen,
+Textnormalisierung, Sterne, Tages-Serien, Tempo-Auswertung, Abzeichen, Einstellungen und
+Freischaltung im Einbettungsmodus. Script-Laden und zentrale Trainings-/Lernportal-Abläufe
+werden zusätzlich mit einer simulierten Browser-Umgebung geprüft (kein echter Browser-Test).
 
 ## Update veröffentlichen
 
@@ -53,3 +68,5 @@ Nachrichten (`source: "zehnfinger"`, Version `v: 1`):
 | App → Seite | `state` | der ganze Stand, 400 ms nach jeder Änderung |
 
 Ohne `?embed=1` (GitHub Pages, lokale Datei) ändert sich nichts. Das Lernportal kopiert die Dateien mit `npm run zehnfinger:sync` aus diesem Ordner nach `public/zehnfinger/` (ohne `sw.js`).
+**Integrationshinweis:** Diese Kopie verwendet eine feste Dateiliste. Dort muss auch `logic.js`
+ergänzt werden; die Änderung im Lernportal erfolgt in einem separaten Auftrag.
