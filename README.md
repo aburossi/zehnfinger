@@ -64,7 +64,7 @@ Nachrichten (`source: "zehnfinger"`, Version `v: 1`):
 | App → Seite | `ready` | die App ist da und wartet auf ihren Stand |
 | Seite → App | `init` | `state`: Stand der Person oder `null` (neu) |
 | Seite → App | `init-error` | Stand nicht lesbar, die App bleibt gesperrt |
-| App → Seite | `run` | `{t, ms, acc, apm, chars, errors, lesson, starsBefore, starsAfter, bestApmBefore}` einer fertigen Übung |
+| App → Seite | `run` | `{t, ms, acc, apm, chars, errors, lesson, mode?, starsBefore, starsAfter, bestApmBefore}` einer fertigen Übung (`mode`: `lesson`, `free`, `problem` oder Name der Herausforderung) |
 | App → Seite | `state` | der ganze Stand, 400 ms nach jeder Änderung |
 
 Ohne `?embed=1` (GitHub Pages, lokale Datei) ändert sich nichts. Das Lernportal kopiert die Dateien mit `npm run zehnfinger:sync` aus diesem Ordner nach `public/zehnfinger/` (ohne `sw.js`).

@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 
 /* ---------- Einbettung im Lernportal ----------
    Läuft die App als iframe mit ?embed=1, speichert sie nichts im Browser, sondern meldet jede Übung und den
@@ -11,9 +11,12 @@ const HOST_MSG = "zehnfinger";
 const toHost = msg => { try { window.parent.postMessage({ source:HOST_MSG, v:1, ...msg }, location.origin); } catch (e) {} };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const { ROWS, KEYMAP, KEYINFO, fingerOf, lessonText, sentencesText, normalizeCustom,
+const { ROWS, KEYMAP, KEYINFO, FINGER_NAMES, fingerOf, lessonText, sentencesText, normalizeCustom,
   defaults, merge, dayKey, streak, starsOf, totalStars, isUnlocked, bestApm, totalMs,
-  recommended, BADGES, checkBadges, problemChars, problemText, statFor, recordTime, liveApmFor, runMetrics } = ZehnfingerLogic;
+  recommended, BADGES, checkBadges, problemChars, problemText, statFor, recordTime, liveApmFor, runMetrics,
+  dailyText, speedChallengeText, huntChallengeText,
+  fingerErrorAnalysis, compareWithHistory, nextStepRecommendation, updateChallengeRecord,
+  PLANS, getPlanProgress, completePlanDay, setPlan } = ZehnfingerLogic;
 
 /* ---------- Tastatur Deutsch (Schweiz) ---------- */
 // Finger: 0 kleiner L, 1 Ring L, 2 Mittel L, 3 Zeige L, 4 Daumen L, 5 Daumen R, 6 Zeige R, 7 Mittel R, 8 Ring R, 9 kleiner R
@@ -142,10 +145,105 @@ function renderHome() {
   $("#badges").innerHTML = BADGES.map(b => `<div class="card badge ${data.badges[b.id] ? "" : "off"}">
     <span class="bi">${b.icon}</span><span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span></div>`).join("");
 
+  renderPlan();
+  renderChallenges();
+
   $("#setGoal").value = String(data.settings.goal);
   $("#setHands").checked = data.settings.hands;
   $("#setSound").checked = data.settings.sound;
   $("#setUnlock").checked = data.settings.unlockAll;
+}
+
+function renderChallenges() {
+  const records = data.challenges || {};
+  const z = records.zeitrennen;
+  const f = records.fehlerjagd;
+  const t = records.tagesaufgabe;
+
+  const bZ = $("#bestZeitrennen");
+  if (bZ) bZ.textContent = z && z.bestChars ? `Bestmarke: ${z.bestChars} Anschläge (${z.bestApm} APM)` : "Bestmarke: noch keine";
+
+  const bF = $("#bestFehlerjagd");
+  if (bF) bF.textContent = f && f.cleanRuns ? `Bestmarke: ${f.cleanRuns}× fehlerfrei (Tempo: ${f.bestApm} APM)` : (f && f.bestAcc ? `Beste Genauigkeit: ${f.bestAcc} %` : "Bestmarke: noch keine");
+
+  const bT = $("#bestTagesaufgabe");
+  if (bT) bT.textContent = t && t.bestApm ? `Bestmarke: ${t.bestApm} APM (${t.bestAcc} %)` : "Bestmarke: noch keine";
+
+  const btnZ = $("#btnZeitrennen"); if (btnZ) btnZ.onclick = startSpeedChallenge;
+  const btnF = $("#btnFehlerjagd"); if (btnF) btnF.onclick = startHuntChallenge;
+  const btnT = $("#btnTagesaufgabe"); if (btnT) btnT.onclick = startDailyChallenge;
+}
+
+function renderPlan() {
+  const container = $("#planSection");
+  if (!container) return;
+  container.innerHTML = "";
+  const prog = getPlanProgress(data.plan);
+
+  if (!prog.active) {
+    const head = document.createElement("div"); head.className = "plan-head";
+    const h3 = document.createElement("h3"); h3.textContent = "Trainingsplan wählen";
+    head.appendChild(h3); container.appendChild(head);
+
+    const note = document.createElement("p"); note.className = "note";
+    note.textContent = "Wähle einen Trainingsplan für tägliche gezielte Einheiten:";
+    container.appendChild(note);
+
+    const grid = document.createElement("div"); grid.className = "plan-grid";
+    Object.values(PLANS).forEach(p => {
+      const card = document.createElement("button");
+      card.className = "plan-choice";
+      card.innerHTML = `<h4>${esc(p.title)}</h4><p>${esc(p.desc)}</p>`;
+      card.onclick = () => { setPlan(data, p.id); save(); renderHome(); };
+      grid.appendChild(card);
+    });
+    container.appendChild(grid);
+    return;
+  }
+
+  const task = prog.currentTask;
+  const head = document.createElement("div"); head.className = "plan-head";
+  const info = document.createElement("div");
+  info.innerHTML = `<h3 style="margin:0">${esc(prog.title)}</h3><p class="note" style="margin:2px 0 0">Tag ${prog.completedCount} von ${prog.totalDays} erledigt (${prog.percent} %)</p>`;
+  const changeBtn = document.createElement("button");
+  changeBtn.className = "btn small"; changeBtn.id = "btnChangePlan"; changeBtn.textContent = "Plan wechseln";
+  changeBtn.onclick = () => {
+    if (confirm("Möchtest du den aktuellen Trainingsplan beenden oder wechseln?")) {
+      setPlan(data, null); save(); renderHome();
+    }
+  };
+  head.appendChild(info); head.appendChild(changeBtn);
+  container.appendChild(head);
+
+  const bar = document.createElement("div"); bar.className = "plan-bar";
+  const barFill = document.createElement("i"); barFill.style.width = prog.percent + "%";
+  bar.appendChild(barFill);
+  container.appendChild(bar);
+
+  const taskBox = document.createElement("div"); taskBox.className = "plan-task";
+  const taskInfo = document.createElement("div"); taskInfo.className = "plan-task-info";
+  taskInfo.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span class="plan-badge ${prog.isTodayDone ? "done" : "open"}">${prog.isTodayDone ? "Heute erledigt ✓" : "Heutige Aufgabe"}</span>
+      <h4 style="margin:0">${esc(task.title)} · ca. ${task.minutes} Min.</h4>
+    </div>
+    <p>${esc(task.desc)}</p>
+  `;
+  const startBtn = document.createElement("button");
+  startBtn.className = "btn small primary"; startBtn.id = "btnStartPlanTask";
+  startBtn.textContent = prog.isTodayDone ? "Nochmal trainieren" : "Heute starten ▸";
+  startBtn.onclick = () => {
+    if (task.type === "lesson") startLesson(task.targetId);
+    else if (task.type === "challenge") {
+      if (task.targetId === "zeitrennen") startSpeedChallenge();
+      else if (task.targetId === "fehlerjagd") startHuntChallenge();
+      else if (task.targetId === "tagesaufgabe") startDailyChallenge();
+    } else if (task.type === "free") {
+      $("#freeSentences").click();
+    }
+  };
+  taskBox.appendChild(taskInfo); taskBox.appendChild(startBtn);
+  container.appendChild(taskBox);
 }
 
 function renderChart() {
@@ -205,17 +303,52 @@ function buildHands() {
 }
 
 /* ---------- Training ---------- */
-let run = null, layoutWarned = false, prevNext = [];
+let run = null, layoutWarned = false, prevNext = [], countdownInterval = null;
 function startLesson(idx) {
   const L = LESSONS[idx];
   startTraining({ mode:"lesson", idx, title:`Lektion ${L.n}: ${L.title}`, text:lessonText(idx) });
 }
+function startSpeedChallenge() {
+  startTraining({
+    mode: "zeitrennen",
+    title: "Zeitrennen (60 Sekunden)",
+    text: speedChallengeText(),
+    duration: 60000,
+    regen: speedChallengeText
+  });
+}
+function startHuntChallenge() {
+  const gen = () => huntChallengeText(data);
+  startTraining({
+    mode: "fehlerjagd",
+    title: "Fehlerjagd (Ziel: 0 Fehler)",
+    text: gen(),
+    regen: gen
+  });
+}
+function startDailyChallenge() {
+  startTraining({
+    mode: "tagesaufgabe",
+    title: `Tagesaufgabe · ${dayKey()}`,
+    text: dailyText()
+  });
+}
 function startTraining(cfg) {
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
   const chars = [...cfg.text];
   run = { cfg, chars, pos:0, errors:0, marks:new Uint8Array(chars.length), started:false, last:0, active:0, wrong:{}, done:false, lineTop:0 };
   $("#trainTitle").textContent = cfg.title;
   $("#startHint").hidden = false;
   $("#hands").hidden = !data.settings.hands;
+  const timePill = $("#timePill");
+  if (timePill) {
+    if (cfg.duration) {
+      timePill.hidden = false;
+      const lt = $("#liveTime"); if (lt) lt.textContent = Math.ceil(cfg.duration / 1000) + "s";
+    } else {
+      timePill.hidden = true;
+    }
+  }
   const box = $("#text"); box.innerHTML = ""; box.scrollTop = 0;
   let word = document.createElement("span"); word.className = "w";
   chars.forEach(c => {
@@ -265,15 +398,19 @@ function followLine() {
     box.scrollTo({ top: Math.max(0, top - sp.offsetHeight - 14), behavior: "smooth" });
   }
 }
-let actx = null;
+let actx = null, lastBeepTime = 0, lastShakeTime = 0;
 function beep() {
   if (!data.settings.sound) return;
+  const now = performance.now();
+  if (now - lastBeepTime < 250) return; // Ruhige Fehleranzeige, kein Ton-Spam
+  lastBeepTime = now;
   try {
     actx = actx || new AudioContext();
     const o = actx.createOscillator(), g = actx.createGain();
     o.type = "triangle"; o.frequency.value = 196;
-    g.gain.setValueAtTime(0.12, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.12);
-    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.13);
+    g.gain.setValueAtTime(0.08, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.1);
+    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.11);
   } catch (e) {}
 }
 function onTrainKey(e) {
@@ -285,8 +422,30 @@ function onTrainKey(e) {
     layoutWarned = true; $("#layoutBanner").hidden = false;
   }
   const now = performance.now();
-  if (!run.started) { run.started = true; run.last = now; $("#startHint").hidden = true; }
-  else { run.active += Math.min(now - run.last, 5000); run.last = now; }
+  if (!run.started) {
+    run.started = true;
+    run.last = now;
+    $("#startHint").hidden = true;
+    if (run.cfg.duration) {
+      countdownInterval = setInterval(() => {
+        if (!run || run.done) { clearInterval(countdownInterval); countdownInterval = null; return; }
+        const left = Math.max(0, Math.ceil((run.cfg.duration - run.active) / 1000));
+        const lt = $("#liveTime"); if (lt) lt.textContent = left + "s";
+        if (run.active >= run.cfg.duration) {
+          clearInterval(countdownInterval); countdownInterval = null;
+          finishRun();
+        }
+      }, 250);
+    }
+  } else {
+    run.active += Math.min(now - run.last, 5000);
+    run.last = now;
+    if (run.cfg.duration && run.active >= run.cfg.duration) {
+      if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+      finishRun();
+      return;
+    }
+  }
 
   const exp = run.chars[run.pos], span = run.spans[run.pos];
   if (e.key === exp) {
@@ -303,7 +462,12 @@ function onTrainKey(e) {
     if (!run.marks[run.pos]) { run.marks[run.pos] = 1; statFor(data, exp).e++; }
     run.wrong[exp] = (run.wrong[exp] || 0) + 1;
     span.classList.add("bad");
-    const box = $("#text"); box.classList.remove("shake"); void box.offsetWidth; box.classList.add("shake");
+    if (now - lastShakeTime > 200) {
+      lastShakeTime = now;
+      const box = $("#text");
+      box.classList.remove("shake");
+      box.classList.add("shake");
+    }
     const hit = KEYMAP[e.key];
     if (hit && KEYEL[hit.id]) { const el = KEYEL[hit.id]; el.classList.add("wrong"); setTimeout(() => el.classList.remove("wrong"), 220); }
     beep();
@@ -312,11 +476,14 @@ function onTrainKey(e) {
 }
 
 function abortRun() {
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
   recordTime(data, run.active); save(); run = null; show("home");
 }
 function finishRun() {
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
   run.done = true;
-  const cfg = run.cfg, chars = run.chars.length;
+  const cfg = run.cfg;
+  const chars = Math.max(run.pos >= run.chars.length ? run.chars.length : run.pos, 1);
   const { apm, acc, stars } = runMetrics(chars, run.errors, run.active);
   recordTime(data, run.active);
   data.history.push({ t:Date.now(), mode:cfg.mode, lesson:cfg.mode === "lesson" ? LESSONS[cfg.idx].n : null, apm, acc, ms:Math.round(run.active), chars, errors:run.errors });
@@ -329,16 +496,41 @@ function finishRun() {
     rec.runs++; rec.stars = Math.max(rec.stars, stars); rec.bestApm = Math.max(rec.bestApm, apm); rec.bestAcc = Math.max(rec.bestAcc, acc);
     data.lessons[n] = rec;
   }
+
+  let isNewBest = false;
+  if (["zeitrennen", "fehlerjagd", "tagesaufgabe"].includes(cfg.mode)) {
+    const recRes = updateChallengeRecord(data.challenges, cfg.mode, { apm, acc, chars, errors:run.errors, ms:run.active, t:Date.now() });
+    data.challenges = recRes.challenges;
+    isNewBest = recRes.isNewBest;
+  }
+
+  let planCompletedNow = false;
+  if (data.plan && data.plan.id) {
+    const prog = getPlanProgress(data.plan);
+    if (prog.active && !prog.isTodayDone) {
+      const task = prog.currentTask;
+      const matches = (task.type === "lesson" && cfg.mode === "lesson" && task.targetId === cfg.idx) ||
+                      (task.type === "challenge" && task.targetId === cfg.mode) ||
+                      (task.type === "free" && (cfg.mode === "sentences" || cfg.mode === "free"));
+      if (matches || chars >= 80) {
+        completePlanDay(data);
+        planCompletedNow = true;
+      }
+    }
+  }
+
   const newBadges = checkBadges(data);
   save();
   if (EMBED) {
     const last = data.history[data.history.length - 1], lessonRun = cfg.mode === "lesson";
+    const reportMode = (cfg.mode === "sentences" || cfg.mode === "custom") ? "free" : cfg.mode;
     toHost({ type:"run", run:{ t:last.t, ms:last.ms, acc:last.acc, apm:last.apm, chars:last.chars, errors:last.errors, lesson:last.lesson,
+      ...(reportMode ? { mode:reportMode } : {}),
       ...(lessonRun ? { starsBefore:prevStars, starsAfter:data.lessons[last.lesson].stars, bestApmBefore } : {}) } });
   }
   // Browser bitten, den Speicher nicht automatisch aufzuräumen.
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  renderResult({ cfg, apm, acc, stars, errors:run.errors, ms:run.active, prevStars, newBadges, wrong:run.wrong });
+  renderResult({ cfg, apm, acc, stars, errors:run.errors, ms:run.active, prevStars, newBadges, wrong:run.wrong, isNewBest, planCompletedNow });
 }
 
 function renderResult(r) {
@@ -349,11 +541,20 @@ function renderResult(r) {
   const titles = ["Fast!", "Geschafft!", "Stark!", "Perfekt!"];
   $("#rTitle").textContent = titles[r.stars];
   let msg;
-  if (r.stars === 0) msg = "Für einen Stern brauchst du 90 % Genauigkeit. Tipp langsamer, schau nicht auf die Tasten und versuch es nochmal.";
-  else if (isLesson && r.prevStars === 0 && r.cfg.idx < LESSONS.length - 1) msg = `Die nächste Lektion ist jetzt frei: ${LESSONS[r.cfg.idx + 1].title}.`;
-  else if (r.stars === 3) msg = "Drei Sterne. Jetzt darfst du ruhig ein bisschen schneller werden.";
-  else msg = `Mit ${r.stars === 1 ? "95" : "98"} % Genauigkeit gibt es ${r.stars === 1 ? "zwei" : "drei"} Sterne. Genau vor schnell!`;
-  if (!isLesson) msg = r.acc >= 95 ? "Sauber getippt!" : "Gut geübt. Achte beim nächsten Mal noch mehr auf die Genauigkeit.";
+  if (r.cfg.mode === "zeitrennen") {
+    msg = r.isNewBest ? "🏆 Neue persönliche Bestmarke im Zeitrennen!" : "60 Sekunden Zeitrennen abgeschlossen. Guter Einsatz!";
+  } else if (r.cfg.mode === "fehlerjagd") {
+    msg = r.errors === 0 ? "✨ Ziel erreicht: Komplett fehlerfrei!" : `Ziel verpasst: ${r.errors} Fehler. Probier es gleich nochmal!`;
+  } else if (r.cfg.mode === "tagesaufgabe") {
+    msg = "📅 Tagesaufgabe gemeistert! Wie war dein Gefühl heute?";
+  } else if (isLesson) {
+    if (r.stars === 0) msg = "Für einen Stern brauchst du 90 % Genauigkeit. Tipp langsamer, schau nicht auf die Tasten und versuch es nochmal.";
+    else if (r.prevStars === 0 && r.cfg.idx < LESSONS.length - 1) msg = `Die nächste Lektion ist jetzt frei: ${LESSONS[r.cfg.idx + 1].title}.`;
+    else if (r.stars === 3) msg = "Drei Sterne. Jetzt darfst du ruhig ein bisschen schneller werden.";
+    else msg = `Mit ${r.stars === 1 ? "95" : "98"} % Genauigkeit gibt es ${r.stars === 1 ? "zwei" : "drei"} Sterne. Genau vor schnell!`;
+  } else {
+    msg = r.acc >= 95 ? "Sauber getippt!" : "Gut geübt. Achte beim nächsten Mal noch mehr auf die Genauigkeit.";
+  }
   $("#rMsg").textContent = msg;
   $("#rApm").textContent = r.apm;
   $("#rAcc").textContent = r.acc + " %";
@@ -362,14 +563,55 @@ function renderResult(r) {
   $("#rTime").textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 
   let extra = "";
-  const worst = Object.entries(r.wrong).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  if (worst.length) {
-    const [c] = worst[0], f = fingerOf(c);
-    extra += `<p>Heute schwierig: ${worst.map(([ch]) => `<kbd>${ch === " " ? "Leertaste" : esc(ch)}</kbd>`).join(" ")}`;
-    if (f !== null && c !== " ") extra += `. Das <kbd>${esc(c)}</kbd> tippst du mit dem <b>${FINGER_DAT[f]}</b>.`;
-    extra += `</p>`;
+  if (r.planCompletedNow) {
+    extra += `<div class="fb-card"><div class="fb-head">Trainingsplan</div><div class="fb-body"><span class="fb-highlight">🎯 Tag im Trainingsplan abgeschlossen!</span> Starker Fortschritt heute.</div></div>`;
   }
-  if (r.newBadges.length) extra += `<p>Neues Abzeichen:</p>` + r.newBadges.map(b => `<span class="newbadge">${b.icon} ${esc(b.name)}</span>`).join("");
+  if (r.isNewBest) {
+    extra += `<div class="fb-card"><div class="fb-head">Bestmarke</div><div class="fb-body"><span class="fb-highlight">🏆 Neuer persönlicher Rekord!</span></div></div>`;
+  }
+
+  // 1. Analyse der Fehler nach Finger und Tasten
+  const analysis = fingerErrorAnalysis(r.wrong);
+  if (analysis.totalErrors > 0 && analysis.worstFinger) {
+    const fingerText = analysis.worstFinger.name;
+    const keysText = analysis.worstFinger.keys.map(k => `<kbd>${k.key === " " ? "Leertaste" : esc(k.key)}</kbd> (${k.count}×)`).join(", ");
+    extra += `<div class="fb-card">
+      <div class="fb-head">Fehleranalyse</div>
+      <div class="fb-body">Meiste Fehler: <b>${esc(fingerText)}</b> bei ${keysText}. Insgesamt ${analysis.totalErrors} Fehler.</div>
+    </div>`;
+  }
+
+  // 2. Vergleich mit dem eigenen Schnitt der letzten Übungen
+  const historyBefore = data.history.slice(0, -1);
+  const comp = compareWithHistory(historyBefore, { apm: r.apm, acc: r.acc });
+  if (comp.hasComparison) {
+    extra += `<div class="fb-card">
+      <div class="fb-head">Dein Schnitt (letzte ${comp.sampleSize} Übungen)</div>
+      <div class="fb-body">Tempo: <b>${esc(comp.apmText)}</b> · Genauigkeit: <b>${esc(comp.accText)}</b></div>
+    </div>`;
+  }
+
+  // 3. Konkreter nächster Schritt
+  const rec = nextStepRecommendation({
+    mode: r.cfg.mode,
+    lessonIdx: r.cfg.idx,
+    stars: r.stars,
+    acc: r.acc,
+    apm: r.apm,
+    errors: r.errors,
+    analysis,
+    data
+  });
+  if (rec) {
+    extra += `<div class="fb-card">
+      <div class="fb-head">Nächster Schritt</div>
+      <div class="fb-body">${esc(rec)}</div>
+    </div>`;
+  }
+
+  if (r.newBadges.length) {
+    extra += `<p>Neues Abzeichen:</p>` + r.newBadges.map(b => `<span class="newbadge">${b.icon} ${esc(b.name)}</span>`).join("");
+  }
   $("#rExtra").innerHTML = extra;
 
   const hasNext = isLesson && r.cfg.idx < LESSONS.length - 1 && isUnlocked(data, r.cfg.idx + 1, EMBED);

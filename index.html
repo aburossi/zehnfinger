@@ -45,6 +45,34 @@
     <button class="btn primary" id="heroBtn">Weiter üben ▸</button>
   </section>
 
+  <h2>Trainingsplan</h2>
+  <div class="card plan-card" id="planSection"></div>
+
+  <h2>Herausforderungen</h2>
+  <div class="challenges" id="challenges">
+    <div class="card ch-card">
+      <div class="ch-badge">⏱️ 60 Sekunden</div>
+      <h3>Zeitrennen</h3>
+      <p>60 Sekunden Höchsttempo: Wie viele korrekte Anschläge schaffst du?</p>
+      <div class="ch-best" id="bestZeitrennen">Bestmarke: –</div>
+      <button class="btn small primary" id="btnZeitrennen">Zeitrennen starten</button>
+    </div>
+    <div class="card ch-card">
+      <div class="ch-badge">🎯 0 Fehler</div>
+      <h3>Fehlerjagd</h3>
+      <p>Text aus deinen Problemtasten. Ziel: Komplett fehlerfrei durchkommen!</p>
+      <div class="ch-best" id="bestFehlerjagd">Bestmarke: –</div>
+      <button class="btn small primary" id="btnFehlerjagd">Fehlerjagd starten</button>
+    </div>
+    <div class="card ch-card">
+      <div class="ch-badge">📅 Täglich neu</div>
+      <h3>Tagesaufgabe</h3>
+      <p>Heute für alle der gleiche Text. Teste deine Tagesform!</p>
+      <div class="ch-best" id="bestTagesaufgabe">Bestmarke: –</div>
+      <button class="btn small primary" id="btnTagesaufgabe">Tagesaufgabe starten</button>
+    </div>
+  </div>
+
   <h2>Lektionen</h2>
   <div class="lessons" id="lessons"></div>
 
@@ -126,6 +154,7 @@
   <div class="trainbar">
     <button class="btn small" id="trainBack">← Übersicht</button>
     <span class="title" id="trainTitle"></span>
+    <span class="pill" id="timePill" hidden>Zeit <b id="liveTime">60s</b></span>
     <span class="pill">Tempo <b id="liveApm">–</b></span>
     <span class="pill">Fehler <b id="liveErr">0</b></span>
   </div>
