@@ -84,5 +84,5 @@ test("HTML lädt data → logic → app; Offline-Assets enthalten logic.js", () 
   assert.deepEqual(scripts, ["data.js", "logic.js", "app.js"]);
   const sw = fs.readFileSync(path.join(root, "sw.js"), "utf8");
   assert.match(sw, /"\.\/logic\.js"/);
-  assert.match(sw, /const CACHE = "zehnfinger-v3"/);
+  assert.match(sw, /const CACHE = "zehnfinger-v4"/);
 });

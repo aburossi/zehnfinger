@@ -1,5 +1,5 @@
 "use strict";
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.3.1";
 
 /* ---------- Einbettung im Lernportal ----------
    Läuft die App als iframe mit ?embed=1, speichert sie nichts im Browser, sondern meldet jede Übung und den
@@ -73,7 +73,9 @@ function importBackup(file) {
   };
   reader.readAsText(file);
 }
-function setBackupMsg(t) { const m = $("#backupMsg"); m.textContent = t; m.hidden = !t; }
+function announce(t) { $("#status").textContent = t; }
+function focusView(v) { $(v === "home" ? "#heroTitle" : v === "train" ? "#trainTitle" : "#rTitle").focus(); }
+function setBackupMsg(t) { announce(t); const m = $("#backupMsg"); m.textContent = t; m.hidden = !t; }
 function renderBackup() {
   const last = data.lastBackup, runs = data.history.length;
   const days = last ? Math.floor((Date.now() - last) / 86400000) : null;
@@ -90,6 +92,8 @@ function show(v) {
   window.scrollTo(0, 0);
   if (v === "home") renderHome();
   renderHeader();
+  $(".skip-link").setAttribute("href", v === "home" ? "#heroTitle" : v === "train" ? "#trainTitle" : "#rTitle");
+  focusView(v);
 }
 function renderHeader() {
   const s = streak(data);
@@ -98,7 +102,7 @@ function renderHeader() {
   $("#goalText").textContent = `${Math.floor(mins)} / ${goal} Min.`;
   $("#goalRing").style.strokeDashoffset = 94.25 * (1 - Math.min(1, mins / goal));
 }
-function starHtml(n) { return `<span class="stars" aria-label="${n} von 3 Sternen">${[0,1,2].map(i => `<span class="${i < n ? "on" : "off"}">★</span>`).join("")}</span>`; }
+function starHtml(n) { return `<span class="stars" role="img" aria-label="${n} von 3 Sternen">${[0,1,2].map(i => `<span class="${i < n ? "on" : "off"}">★</span>`).join("")}</span>`; }
 function capsFor(L) {
   if (L.kind === "shift") return ["⇧ Shift"];
   if (L.kind === "numbers") return ["1 – 0"];
@@ -123,6 +127,7 @@ function renderHome() {
     b.className = "lesson" + (locked ? " locked" : "") + (i === rec ? " next" : "");
     b.innerHTML = `<span class="top"><span>Lektion ${L.n}</span>${locked ? "🔒" : starHtml(starsOf(data, L.n))}</span>
       <span class="lt">${esc(L.title)}</span><span class="caps">${capsFor(L).map(c => `<span>${esc(c)}</span>`).join("")}</span>`;
+    b.disabled = locked;
     b.onclick = () => { if (!locked) startLesson(i); };
     if (locked) b.title = "Schaffe zuerst die Lektion davor (mindestens 1 Stern).";
     grid.appendChild(b);
@@ -143,13 +148,15 @@ function renderHome() {
   renderBackup();
 
   $("#badges").innerHTML = BADGES.map(b => `<div class="card badge ${data.badges[b.id] ? "" : "off"}">
-    <span class="bi">${b.icon}</span><span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span></div>`).join("");
+    <span class="bi" aria-hidden="true">${b.icon}</span><span><span class="sr-only">${data.badges[b.id] ? "Erreicht" : "Noch nicht erreicht"}: </span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></span></div>`).join("");
 
   renderPlan();
   renderChallenges();
 
   $("#setGoal").value = String(data.settings.goal);
   $("#setHands").checked = data.settings.hands;
+  $("#setLargeText").checked = !!data.settings.largeText;
+  $("#text").classList.toggle("large-text", !!data.settings.largeText);
   $("#setSound").checked = data.settings.sound;
   $("#setUnlock").checked = data.settings.unlockAll;
 }
@@ -194,7 +201,7 @@ function renderPlan() {
       const card = document.createElement("button");
       card.className = "plan-choice";
       card.innerHTML = `<h4>${esc(p.title)}</h4><p>${esc(p.desc)}</p>`;
-      card.onclick = () => { setPlan(data, p.id); save(); renderHome(); };
+      card.onclick = () => { setPlan(data, p.id); save(); renderHome(); focusView("home"); };
       grid.appendChild(card);
     });
     container.appendChild(grid);
@@ -209,7 +216,7 @@ function renderPlan() {
   changeBtn.className = "btn small"; changeBtn.id = "btnChangePlan"; changeBtn.textContent = "Plan wechseln";
   changeBtn.onclick = () => {
     if (confirm("Möchtest du den aktuellen Trainingsplan beenden oder wechseln?")) {
-      setPlan(data, null); save(); renderHome();
+      setPlan(data, null); save(); renderHome(); focusView("home");
     }
   };
   head.appendChild(info); head.appendChild(changeBtn);
@@ -260,7 +267,7 @@ function renderChart() {
   const last = h[h.length - 1];
   s += `<text class="lbl" x="${x(h.length - 1) + 8}" y="${y(last.apm) + 4}">${last.apm}</text>`;
   s += `<text class="axis" x="${pl}" y="${H - 6}">früher</text><text class="axis" x="${W - pr}" y="${H - 6}" text-anchor="end">zuletzt</text></svg>`;
-  el.innerHTML = s;
+  el.innerHTML = s + `<details><summary>Diagrammwerte als Text</summary><ol class="chart-values">${h.map((d, i) => `<li>Übung ${i + 1}: ${d.apm} Anschläge pro Minute, ${d.acc} % Genauigkeit</li>`).join("")}</ol></details>`;
 }
 
 /* ---------- Tastatur & Hände zeichnen ---------- */
@@ -360,9 +367,9 @@ function startTraining(cfg) {
   });
   if (word.childNodes.length) box.appendChild(word);
   run.spans = box.querySelectorAll(".c");
-  show("train");
   run.spans[0].classList.add("cur");
   updateHint(); updateLive();
+  show("train");
 }
 
 function updateHint() {
@@ -395,7 +402,7 @@ function followLine() {
   const top = sp.offsetTop;
   if (top !== run.lineTop) {
     run.lineTop = top;
-    box.scrollTo({ top: Math.max(0, top - sp.offsetHeight - 14), behavior: "smooth" });
+    box.scrollTo({ top: Math.max(0, top - sp.offsetHeight - 14), behavior: "auto" });
   }
 }
 let actx = null, lastBeepTime = 0, lastShakeTime = 0;
@@ -415,11 +422,12 @@ function beep() {
 }
 function onTrainKey(e) {
   if (e.key === "Escape") { e.preventDefault(); abortRun(); return; }
-  if (e.metaKey || (e.ctrlKey && !e.altKey)) return;
+  if (e.metaKey || (e.ctrlKey && !e.altKey) || (e.altKey && !e.ctrlKey) || e.isComposing) return;
+  if (e.target && e.target !== $("#trainTitle") && e.target !== $("#text")) return;
   if (e.key.length !== 1) return;
   e.preventDefault();
   if (!layoutWarned && ((e.code === "KeyY" && e.key.toLowerCase() === "y") || (e.code === "KeyZ" && e.key.toLowerCase() === "z"))) {
-    layoutWarned = true; $("#layoutBanner").hidden = false;
+    layoutWarned = true; $("#layoutBanner").hidden = false; announce($("#layoutBanner").textContent);
   }
   const now = performance.now();
   if (!run.started) {
@@ -477,7 +485,7 @@ function onTrainKey(e) {
 
 function abortRun() {
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
-  recordTime(data, run.active); save(); run = null; show("home");
+  recordTime(data, run.active); save(); run = null; show("home"); announce("Übung abgebrochen.");
 }
 function finishRun() {
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
@@ -538,6 +546,8 @@ function renderResult(r) {
   const isLesson = r.cfg.mode === "lesson";
   $("#rStars").innerHTML = [0,1,2].map(i => `<span class="${i < r.stars ? "on" : ""}">${star}</span>`).join("");
   $("#rStars").hidden = !isLesson;
+  $("#rStars").setAttribute("role", "img");
+  $("#rStars").setAttribute("aria-label", `${r.stars} von 3 Sternen`);
   const titles = ["Fast!", "Geschafft!", "Stark!", "Perfekt!"];
   $("#rTitle").textContent = titles[r.stars];
   let msg;
@@ -625,12 +635,14 @@ function renderResult(r) {
   nextBtn.onclick = () => startLesson(r.cfg.idx + 1);
   renderHeader();
   show("result");
+  announce(`${$("#rTitle").textContent} ${r.stars} von 3 Sternen. ${r.apm} Anschläge pro Minute, ${r.acc} Prozent Genauigkeit, ${r.errors} Fehler.`);
 }
 
 /* ---------- Ereignisse ---------- */
+window.addEventListener("resize", () => { if (view === "train" && run && !run.done) { run.lineTop = -1; followLine(); } });
 window.addEventListener("keydown", e => {
   if (view === "train" && run && !run.done) return onTrainKey(e);
-  if (view === "result" && e.key === "Enter") {
+  if (view === "result" && e.key === "Enter" && !e.ctrlKey && !e.altKey && !e.metaKey && (!e.target || e.target === $("#rTitle"))) {
     e.preventDefault();
     (!$("#rNext").hidden ? $("#rNext") : $("#rAgain")).click();
   }
@@ -638,7 +650,7 @@ window.addEventListener("keydown", e => {
 $("#brand").onclick = () => { if (view === "train" && run && !run.done) abortRun(); else show("home"); };
 $("#trainBack").onclick = () => abortRun();
 $("#rHome").onclick = () => show("home");
-$("#layoutClose").onclick = () => { $("#layoutBanner").hidden = true; };
+$("#layoutClose").onclick = () => { $("#layoutBanner").hidden = true; $("#trainTitle").focus(); };
 
 $("#freeSentences").onclick = () => startTraining({ mode:"sentences", title:"Ganze Sätze", text:sentencesText(), regen:sentencesText });
 const currentProblemText = () => problemText(data);
@@ -647,7 +659,7 @@ $("#customText").addEventListener("input", e => { data.customText = e.target.val
 $("#freeCustom").onclick = () => {
   const { text, removed } = normalizeCustom($("#customText").value);
   const note = $("#customNote");
-  if (text.length < 5) { note.hidden = false; note.textContent = "Bitte zuerst einen Text einfügen."; return; }
+  if (text.length < 5) { note.hidden = false; note.textContent = "Bitte zuerst einen Text einfügen."; announce(note.textContent); $("#customText").focus(); return; }
   note.hidden = !removed.length;
   note.textContent = removed.length ? `Weggelassen, weil nicht direkt tippbar: ${removed.join(" ")}` : "";
   startTraining({ mode:"custom", title:"Eigener Text", text });
@@ -659,8 +671,9 @@ $("#backupFile").onchange = e => { const f = e.target.files[0]; if (f) importBac
 
 $("#setGoal").onchange = e => { data.settings.goal = +e.target.value; save(); renderHeader(); };
 $("#setHands").onchange = e => { data.settings.hands = e.target.checked; save(); };
+$("#setLargeText").onchange = e => { data.settings.largeText = e.target.checked; $("#text").classList.toggle("large-text", e.target.checked); save(); };
 $("#setSound").onchange = e => { data.settings.sound = e.target.checked; save(); };
-$("#setUnlock").onchange = e => { data.settings.unlockAll = e.target.checked; save(); renderHome(); };
+$("#setUnlock").onchange = e => { data.settings.unlockAll = e.target.checked; save(); renderHome(); focusView("home"); };
 $("#setReset").onclick = () => {
   if (confirm("Wirklich den ganzen Fortschritt löschen? Sterne, Abzeichen und Statistik gehen verloren.\nTipp: Vorher «Fortschritt sichern».")) {
     data = defaults(); save(); show("home");
