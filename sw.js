@@ -2,7 +2,7 @@
    Online: holt immer die neuste Version vom Server (Updates sofort sichtbar) und legt sie ab.
    Offline: nimmt die abgelegte Version.
    Neue Dateien in ASSETS eintragen und CACHE hochzählen. */
-const CACHE = "zehnfinger-v2";
+const CACHE = "zehnfinger-v3";
 const FONT_CACHE = "zehnfinger-fonts";
 const ASSETS = [
   "./",
@@ -10,6 +10,7 @@ const ASSETS = [
   "./style.css",
   "./app.js",
   "./data.js",
+  "./logic.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
   "./icons/icon-192.png",

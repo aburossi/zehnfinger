@@ -87,3 +87,6 @@ const LESSONS = [
   { n:16, title:"Satzzeichen",        keys:"?!:;",       kind:"punct" },
   { n:17, title:"Ganze Sätze",        keys:"",           kind:"sentences" }
 ];
+
+const ZehnfingerData = { WORD_SRC, SENTENCES, NUM_SENTENCES, PUNCT_SENTENCES, LESSONS };
+if (typeof module !== "undefined") module.exports = ZehnfingerData;

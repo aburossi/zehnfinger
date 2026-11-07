@@ -11,142 +11,18 @@ const HOST_MSG = "zehnfinger";
 const toHost = msg => { try { window.parent.postMessage({ source:HOST_MSG, v:1, ...msg }, location.origin); } catch (e) {} };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const pick = a => a[Math.floor(Math.random() * a.length)];
-const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const { ROWS, KEYMAP, KEYINFO, fingerOf, lessonText, sentencesText, normalizeCustom,
+  defaults, merge, dayKey, streak, starsOf, totalStars, isUnlocked, bestApm, totalMs,
+  recommended, BADGES, checkBadges, problemChars, problemText, statFor, recordTime, liveApmFor, runMetrics } = ZehnfingerLogic;
 
 /* ---------- Tastatur Deutsch (Schweiz) ---------- */
 // Finger: 0 kleiner L, 1 Ring L, 2 Mittel L, 3 Zeige L, 4 Daumen L, 5 Daumen R, 6 Zeige R, 7 Mittel R, 8 Ring R, 9 kleiner R
 const FINGER_CLASS = ["pinky","ring","middle","index","thumb","thumb","index","middle","ring","pinky"];
 const FINGER_DAT = ["kleinen Finger links","Ringfinger links","Mittelfinger links","Zeigefinger links","Daumen","Daumen","Zeigefinger rechts","Mittelfinger rechts","Ringfinger rechts","kleinen Finger rechts"];
-const ROWS = [
-  [["§","°",0],["1","+",0],["2","\"",1],["3","*",2],["4","ç",3],["5","%",3],["6","&",6],["7","/",6],["8","(",7],["9",")",8],["0","=",9],["'","?",9],["^","`",9],{id:"bksp",label:"⌫",w:2}],
-  [{id:"tab",label:"Tab",w:1.5},["q","Q",0],["w","W",1],["e","E",2],["r","R",3],["t","T",3],["z","Z",6],["u","U",6],["i","I",7],["o","O",8],["p","P",9],["ü","è",9],["¨","!",9],{id:"enter",label:"↵",w:1.5}],
-  [{id:"caps",label:"⇪",w:1.75},["a","A",0],["s","S",1],["d","D",2],["f","F",3],["g","G",3],["h","H",6],["j","J",6],["k","K",7],["l","L",8],["ö","é",9],["ä","à",9],["$","£",9],{id:"enter2",label:"",w:1.25}],
-  [{id:"shiftL",label:"⇧",w:1.25,f:0},["<",">",0],["y","Y",0],["x","X",1],["c","C",2],["v","V",3],["b","B",3],["n","N",6],["m","M",6],[",",";",7],[".",":",8],["-","_",9],{id:"shiftR",label:"⇧",w:2.75,f:9}],
-  [{id:"blankL",label:"",w:3.75,blank:true},{id:"space",label:"",w:7.5,f:4},{id:"blankR",label:"",w:3.75,blank:true}]
-];
-const DEAD = new Set(["¨","^","`"]);
-const KEYMAP = {};   // Zeichen -> {id, shift}
-const KEYINFO = {};  // id -> {f}
 const KEYEL = {};    // id -> Element
-ROWS.forEach((row, r) => row.forEach((k, i) => {
-  if (Array.isArray(k)) {
-    const [n, s, f] = k, id = `k${r}_${i}`;
-    KEYINFO[id] = { f };
-    if (!DEAD.has(n)) KEYMAP[n] = { id, shift: false };
-    if (!DEAD.has(s)) KEYMAP[s] = { id, shift: true };
-  } else KEYINFO[k.id] = { f: k.f ?? null };
-}));
-KEYMAP[" "] = { id: "space", shift: false };
-const HOME = { 0:"a", 1:"s", 2:"d", 3:"f", 6:"j", 7:"k", 8:"l", 9:"ö" };
-const fingerOf = c => KEYMAP[c] ? KEYINFO[KEYMAP[c].id].f : null;
-
-/* ---------- Texte erzeugen (Inhalte in data.js) ---------- */
-const LOWER_WORDS = [...new Set(WORD_SRC.map(w => w.toLowerCase()))];
-const NOUNS = [...new Set(WORD_SRC.filter(w => /^[A-Z]/.test(w)))];
-
-function allowedFor(idx) {
-  const s = new Set([" "]);
-  for (let j = 0; j <= Math.min(idx, 12); j++) for (const c of LESSONS[j].keys) s.add(c);
-  if (idx >= 13) for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") s.add(c);
-  if (idx >= 14) for (const c of "0123456789") s.add(c);
-  if (idx >= 15) for (const c of "?!:;'") s.add(c);
-  if (idx >= 16) Object.keys(KEYMAP).forEach(c => s.add(c));
-  return s;
-}
-const fits = (w, allowed) => [...w].every(c => allowed.has(c));
-
-function drillFor(chars) {
-  const g = [];
-  for (const c of chars) {
-    const f = fingerOf(c); if (f === null) continue;
-    const a = HOME[f] && HOME[f] !== c ? HOME[f] : (f <= 4 ? "f" : "j");
-    g.push(c + c + c, a + c + a, c + a + c, a + c + c + a);
-  }
-  return g;
-}
-function makePseudo(letters, fresh, n) {
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const len = 3 + Math.floor(Math.random() * 3);
-    const w = Array.from({ length: len }, () => pick(letters));
-    w[Math.floor(Math.random() * len)] = pick(fresh);
-    out.push(w.join(""));
-  }
-  return out;
-}
-function sampleWords(pool, fresh, len, allowed) {
-  const out = []; let total = 0, guard = 0, last = "";
-  while (total < len && guard++ < 600) {
-    const src = fresh.length && Math.random() < 0.6 ? fresh : pool;
-    if (!src.length) break;
-    let w = pick(src);
-    if (w === last && src.length > 1) continue;
-    last = w;
-    if (allowed.has(",") && Math.random() < 0.12) w += ",";
-    else if (allowed.has(".") && Math.random() < 0.1) w += ".";
-    out.push(w); total += w.length + 1;
-  }
-  return out;
-}
-function pickSentences(list, len, allowed) {
-  const ok = shuffle(allowed ? list.filter(s => fits(s, allowed)) : list);
-  const out = []; let total = 0;
-  for (const s of ok) { if (total >= len) break; out.push(s); total += s.length + 1; }
-  return out;
-}
-
-function lessonText(idx) {
-  const L = LESSONS[idx], allowed = allowedFor(idx);
-  if (L.kind === "letters") {
-    const target = 150;
-    let groups;
-    if (idx === 0) {
-      groups = [];
-      for (const [x, y] of [["f","j"],["d","k"],["s","l"],["a","ö"]]) groups.push(x+x+x, y+y+y, x+y+x, y+x+y);
-      groups.push("asdf", "jklö");
-    } else groups = drillFor([...L.keys]);
-    const drill = []; let len = 0;
-    for (const g of groups) { if (len > target * 0.45) break; drill.push(g); len += g.length + 1; }
-    const pool = LOWER_WORDS.filter(w => fits(w, allowed));
-    const fresh = pool.filter(w => [...L.keys].some(c => w.includes(c)));
-    const letters = [...allowed].filter(c => /\p{L}/u.test(c));
-    const newLetters = [...L.keys].filter(c => /\p{L}/u.test(c));
-    const extra = pool.length < 12 ? makePseudo(letters, newLetters.length ? newLetters : letters, 12) : [];
-    const words = sampleWords(pool.concat(extra), fresh.length >= 3 ? fresh : [], target - len, allowed);
-    return drill.concat(words).join(" ");
-  }
-  if (L.kind === "shift") {
-    const drill = shuffle("asdfjklerutn".split("")).slice(0, 6).map(c => c.toUpperCase() + c + c);
-    const nouns = sampleWords(NOUNS.filter(w => fits(w, allowed)), [], 90, new Set());
-    const sent = pickSentences(SENTENCES.filter(s => s.length < 60), 50, allowed);
-    return drill.concat(nouns, sent).join(" ");
-  }
-  if (L.kind === "numbers") {
-    const drill = shuffle(["a1a","s2s","d3d","f4f","f5f","j6j","j7j","k8k","l9l","ö0ö"]).slice(0, 6);
-    const nums = Array.from({ length: 6 }, () => String(1 + Math.floor(Math.random() * (Math.random() < .5 ? 99 : 2999))));
-    return drill.concat(nums, pickSentences(NUM_SENTENCES, 90, allowed)).join(" ");
-  }
-  if (L.kind === "punct") {
-    const drill = shuffle(["ja?","nein!","so:","und;","wie?","los!","halt:","gut;"]).slice(0, 6);
-    return drill.concat(pickSentences(PUNCT_SENTENCES, 130, allowed)).join(" ");
-  }
-  return pickSentences(SENTENCES.concat(PUNCT_SENTENCES, NUM_SENTENCES), 260).join(" ");
-}
-
-function normalizeCustom(t) {
-  t = t.replace(/ß/g, "ss").replace(/[„“”«»]/g, '"').replace(/[‘’‚‹›]/g, "'").replace(/[–—]/g, "-").replace(/…/g, "...")
-       .replace(/Ä/g, "Ae").replace(/Ö/g, "Oe").replace(/Ü/g, "Ue").replace(/\s+/g, " ").trim();
-  const removed = new Set(); let out = "";
-  for (const c of t) { if (KEYMAP[c]) out += c; else removed.add(c); }
-  return { text: out.replace(/ {2,}/g, " ").trim().slice(0, 1200), removed: [...removed] };
-}
 
 /* ---------- Speicher ---------- */
 const STORE_KEY = "zehnfinger.v1";
-const defaults = () => ({ lessons:{}, history:[], days:{}, keyStats:{}, badges:{}, customText:"", lastBackup:0,
-  settings:{ goal:10, hands:true, sound:false, unlockAll:false } });
-const merge = d => { const def = defaults(); return { ...def, ...d, settings: { ...def.settings, ...(d.settings || {}) } }; };
 let storageOk = true;
 function load() {
   try {
@@ -161,65 +37,6 @@ let statePostTimer = 0;
 function save() {
   if (EMBED) { clearTimeout(statePostTimer); statePostTimer = setTimeout(() => toHost({ type:"state", state:data }), 400); return; }
   try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { storageOk = false; }
-}
-
-const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-function streak() {
-  const d = new Date(); let n = 0;
-  if (!(data.days[dayKey(d)] >= 30000)) d.setDate(d.getDate() - 1);
-  while (data.days[dayKey(d)] >= 30000) { n++; d.setDate(d.getDate() - 1); }
-  return n;
-}
-const starsOf = n => (data.lessons[n] && data.lessons[n].stars) || 0;
-const totalStars = () => Object.values(data.lessons).reduce((a, r) => a + (r.stars || 0), 0);
-// Im Lernportal gibt es keine Abkürzung: die nächste Lektion öffnet sich erst mit 90 % Genauigkeit.
-const isUnlocked = idx => idx === 0 || (data.settings.unlockAll && !EMBED) || starsOf(LESSONS[idx - 1].n) >= 1;
-const starsFor = acc => acc >= 98 ? 3 : acc >= 95 ? 2 : acc >= 90 ? 1 : 0;
-// Nur Übungen mit mindestens 15 Sekunden und 80 Zeichen zählen fürs Tempo, sonst verfälschen Mini-Texte die Rekorde.
-const bestApm = () => data.history.filter(h => h.acc >= 90 && h.ms >= 15000 && h.chars >= 80).reduce((m, h) => Math.max(m, h.apm), 0);
-const totalMs = () => Object.values(data.days).reduce((a, b) => a + b, 0);
-function recommended() {
-  const open = LESSONS.findIndex((L, i) => isUnlocked(i) && starsOf(L.n) === 0);
-  if (open >= 0) return open;
-  let best = LESSONS.length - 1, low = 4;
-  LESSONS.forEach((L, i) => { const s = starsOf(L.n); if (s < low) { low = s; best = i; } });
-  return best;
-}
-
-const BADGES = [
-  { id:"first",   icon:"🚀", name:"Los geht's",         desc:"Erste Übung geschafft",            check:c => c.runs >= 1 },
-  { id:"home3",   icon:"🏠", name:"Grundreihe-Profi",   desc:"Lektion 1 mit drei Sternen",       check:() => starsOf(1) >= 3 },
-  { id:"clean",   icon:"✨", name:"Fehlerfrei",         desc:"Eine Übung ganz ohne Fehler",      check:c => c.clean },
-  { id:"streak3", icon:"🔥", name:"Dranbleiben",        desc:"3 Tage hintereinander",            check:c => c.streak >= 3 },
-  { id:"hour",    icon:"⏱️", name:"Eine Stunde",        desc:"60 Minuten geübt",                 check:c => c.ms >= 3600000 },
-  { id:"abc",     icon:"🔤", name:"Alle Buchstaben",    desc:"Lektion 13 geschafft",             check:() => starsOf(13) >= 1 },
-  { id:"apm100",  icon:"⚡", name:"Blitz",              desc:"100 Anschläge pro Minute",         check:c => c.best >= 100 },
-  { id:"streak7", icon:"🏆", name:"Wochenserie",        desc:"7 Tage hintereinander",            check:c => c.streak >= 7 },
-  { id:"stars30", icon:"⭐", name:"Sternensammler",     desc:"30 Sterne gesammelt",              check:c => c.stars >= 30 },
-  { id:"apm150",  icon:"🏎️", name:"Turbo",              desc:"150 Anschläge pro Minute",         check:c => c.best >= 150 },
-  { id:"apm200",  icon:"🛸", name:"Überschall",         desc:"200 Anschläge pro Minute",         check:c => c.best >= 200 },
-  { id:"apm250",  icon:"🚀", name:"Raketenstart",       desc:"250 Anschläge pro Minute",         check:c => c.best >= 250 },
-  // Genauigkeit: nur Übungen ab 80 Zeichen zählen, sonst sind Mini-Texte zu leicht.
-  { id:"acc95x3", icon:"🎯", name:"Sauber",             desc:"3 Übungen hintereinander mit 95 % Genauigkeit", check:c => c.run3 >= 95 },
-  { id:"acc98",   icon:"💎", name:"Präzise",            desc:"Eine Übung mit 98 % Genauigkeit (ab 150 Zeichen)", check:c => c.long98 },
-  { id:"clean3",  icon:"🧼", name:"Makellos",           desc:"3 Übungen hintereinander ganz ohne Fehler", check:c => c.clean3 },
-  { id:"fastclean", icon:"🏅", name:"Schnell und genau", desc:"150 Anschläge pro Minute bei 98 % Genauigkeit", check:c => c.fastClean },
-  { id:"master",  icon:"🎓", name:"Zehnfinger-Profi",   desc:"Alle 17 Lektionen geschafft",      check:() => LESSONS.every(L => starsOf(L.n) >= 1) }
-];
-// Zählt fürs Tempo und die Genauigkeit: lang genug (80 Zeichen) und mindestens 15 Sekunden.
-const countsForBadge = h => h.chars >= 80 && h.ms >= 15000;
-function checkBadges() {
-  // Die drei letzten zählenden Übungen: reihen sich Fehler ein, ist die Serie unterbrochen.
-  const last3 = data.history.filter(countsForBadge).slice(-3);
-  const ctx = { runs:data.history.length, best:bestApm(), streak:streak(), stars:totalStars(), ms:totalMs(),
-    clean: data.history.some(h => h.errors === 0 && h.chars >= 80),
-    run3: last3.length === 3 ? Math.min(...last3.map(h => h.acc)) : 0,
-    clean3: last3.length === 3 && last3.every(h => h.errors === 0),
-    long98: data.history.some(h => countsForBadge(h) && h.chars >= 150 && h.acc >= 98),
-    fastClean: data.history.some(h => countsForBadge(h) && h.apm >= 150 && h.acc >= 98) };
-  const got = [];
-  for (const b of BADGES) if (!data.badges[b.id] && b.check(ctx)) { data.badges[b.id] = Date.now(); got.push(b); }
-  return got;
 }
 
 /* ---------- Sicherung ---------- */
@@ -242,7 +59,7 @@ function importBackup(file) {
       const parsed = JSON.parse(reader.result);
       const d = parsed && parsed.app === "zehnfinger" ? parsed.data : parsed;
       if (!d || typeof d.lessons !== "object" || !Array.isArray(d.history)) throw new Error("format");
-      const stars = Object.values(d.lessons).reduce((a, r) => a + (r.stars || 0), 0);
+      const stars = totalStars(d);
       if (!confirm(`Sicherung mit ${d.history.length} Übungen und ${stars} Sternen laden?\nDer aktuelle Fortschritt auf diesem Gerät wird dabei ersetzt.`)) return;
       data = merge(d); save();
       show("home");
@@ -272,7 +89,7 @@ function show(v) {
   renderHeader();
 }
 function renderHeader() {
-  const s = streak();
+  const s = streak(data);
   $("#streak").textContent = s === 1 ? "1 Tag" : `${s} Tage`;
   const goal = data.settings.goal, mins = (data.days[dayKey()] || 0) / 60000;
   $("#goalText").textContent = `${Math.floor(mins)} / ${goal} Min.`;
@@ -289,7 +106,7 @@ function capsFor(L) {
 
 function renderHome() {
   $("#storageWarn").hidden = storageOk;
-  const rec = recommended(), L = LESSONS[rec], s = starsOf(L.n);
+  const rec = recommended(data, EMBED), L = LESSONS[rec], s = starsOf(data, L.n);
   const todayMin = (data.days[dayKey()] || 0) / 60000;
   $("#heroTitle").textContent = data.history.length === 0 ? "Hallo! Bereit für die erste Lektion?" :
     todayMin >= data.settings.goal ? "Tagesziel erreicht. Stark!" : "Schön, dass du wieder da bist.";
@@ -299,26 +116,26 @@ function renderHome() {
   const grid = $("#lessons"); grid.innerHTML = "";
   LESSONS.forEach((L, i) => {
     const b = document.createElement("button");
-    const locked = !isUnlocked(i);
+    const locked = !isUnlocked(data, i, EMBED);
     b.className = "lesson" + (locked ? " locked" : "") + (i === rec ? " next" : "");
-    b.innerHTML = `<span class="top"><span>Lektion ${L.n}</span>${locked ? "🔒" : starHtml(starsOf(L.n))}</span>
+    b.innerHTML = `<span class="top"><span>Lektion ${L.n}</span>${locked ? "🔒" : starHtml(starsOf(data, L.n))}</span>
       <span class="lt">${esc(L.title)}</span><span class="caps">${capsFor(L).map(c => `<span>${esc(c)}</span>`).join("")}</span>`;
     b.onclick = () => { if (!locked) startLesson(i); };
     if (locked) b.title = "Schaffe zuerst die Lektion davor (mindestens 1 Stern).";
     grid.appendChild(b);
   });
 
-  const probs = problemChars();
+  const probs = problemChars(data);
   $("#freeProblem").disabled = probs.length === 0;
   $("#problemDesc").innerHTML = probs.length ? `Deine schwierigsten Tasten: ${probs.map(([c]) => `<kbd>${esc(c)}</kbd>`).join(" ")}` :
     "Erscheint, sobald du ein paar Übungen gemacht hast.";
   $("#customText").value = data.customText || "";
 
-  const best = bestApm(), last10 = data.history.slice(-10);
+  const best = bestApm(data), last10 = data.history.slice(-10);
   $("#tBest").textContent = best ? best : "–";
   $("#tAcc").textContent = last10.length ? Math.round(last10.reduce((a, h) => a + h.acc, 0) / last10.length) + " %" : "–";
-  $("#tTime").textContent = Math.round(totalMs() / 60000) + " Min.";
-  $("#tStars").textContent = `${totalStars()} / ${LESSONS.length * 3}`;
+  $("#tTime").textContent = Math.round(totalMs(data) / 60000) + " Min.";
+  $("#tStars").textContent = `${totalStars(data)} / ${LESSONS.length * 3}`;
   renderChart();
   renderBackup();
 
@@ -346,14 +163,6 @@ function renderChart() {
   s += `<text class="lbl" x="${x(h.length - 1) + 8}" y="${y(last.apm) + 4}">${last.apm}</text>`;
   s += `<text class="axis" x="${pl}" y="${H - 6}">früher</text><text class="axis" x="${W - pr}" y="${H - 6}" text-anchor="end">zuletzt</text></svg>`;
   el.innerHTML = s;
-}
-
-function problemChars() {
-  return Object.entries(data.keyStats)
-    .filter(([c, s]) => c !== " " && KEYMAP[c] && s.n + s.e >= 8)
-    .map(([c, s]) => [c, s.e / (s.n + s.e)])
-    .filter(([, r]) => r >= 0.05)
-    .sort((a, b) => b[1] - a[1]).slice(0, 5);
 }
 
 /* ---------- Tastatur & Hände zeichnen ---------- */
@@ -444,8 +253,7 @@ function updateHint() {
   $("#hint").innerHTML = html;
 }
 function updateLive() {
-  const secs = run.active / 1000;
-  $("#liveApm").textContent = secs >= 3 ? Math.round(run.pos / (secs / 60)) : "–";
+  $("#liveApm").textContent = liveApmFor(run.pos, run.active) ?? "–";
   $("#liveErr").textContent = run.errors;
   $("#liveProg").style.width = (100 * run.pos / run.chars.length) + "%";
 }
@@ -468,11 +276,6 @@ function beep() {
     o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.13);
   } catch (e) {}
 }
-function statFor(c) {
-  const k = c.toLowerCase();
-  return data.keyStats[k] || (data.keyStats[k] = { n:0, e:0 });
-}
-
 function onTrainKey(e) {
   if (e.key === "Escape") { e.preventDefault(); abortRun(); return; }
   if (e.metaKey || (e.ctrlKey && !e.altKey)) return;
@@ -487,7 +290,7 @@ function onTrainKey(e) {
 
   const exp = run.chars[run.pos], span = run.spans[run.pos];
   if (e.key === exp) {
-    statFor(exp).n++;
+    statFor(data, exp).n++;
     span.classList.remove("cur", "bad");
     span.classList.add(run.marks[run.pos] ? "fixed" : "ok");
     run.pos++;
@@ -497,7 +300,7 @@ function onTrainKey(e) {
     updateHint();
   } else {
     run.errors++;
-    if (!run.marks[run.pos]) { run.marks[run.pos] = 1; statFor(exp).e++; }
+    if (!run.marks[run.pos]) { run.marks[run.pos] = 1; statFor(data, exp).e++; }
     run.wrong[exp] = (run.wrong[exp] || 0) + 1;
     span.classList.add("bad");
     const box = $("#text"); box.classList.remove("shake"); void box.offsetWidth; box.classList.add("shake");
@@ -508,20 +311,14 @@ function onTrainKey(e) {
   updateLive();
 }
 
-function recordTime() {
-  if (run.active > 0) data.days[dayKey()] = (data.days[dayKey()] || 0) + Math.round(run.active);
-}
 function abortRun() {
-  recordTime(); save(); run = null; show("home");
+  recordTime(data, run.active); save(); run = null; show("home");
 }
 function finishRun() {
   run.done = true;
   const cfg = run.cfg, chars = run.chars.length;
-  const ms = Math.max(run.active, 1000);
-  const apm = Math.round(chars / (ms / 60000));
-  const acc = Math.round(1000 * chars / (chars + run.errors)) / 10;
-  const stars = starsFor(acc);
-  recordTime();
+  const { apm, acc, stars } = runMetrics(chars, run.errors, run.active);
+  recordTime(data, run.active);
   data.history.push({ t:Date.now(), mode:cfg.mode, lesson:cfg.mode === "lesson" ? LESSONS[cfg.idx].n : null, apm, acc, ms:Math.round(run.active), chars, errors:run.errors });
   if (data.history.length > 300) data.history.splice(0, data.history.length - 300);
   let prevStars = 0, bestApmBefore = 0;
@@ -532,7 +329,7 @@ function finishRun() {
     rec.runs++; rec.stars = Math.max(rec.stars, stars); rec.bestApm = Math.max(rec.bestApm, apm); rec.bestAcc = Math.max(rec.bestAcc, acc);
     data.lessons[n] = rec;
   }
-  const newBadges = checkBadges();
+  const newBadges = checkBadges(data);
   save();
   if (EMBED) {
     const last = data.history[data.history.length - 1], lessonRun = cfg.mode === "lesson";
@@ -575,7 +372,7 @@ function renderResult(r) {
   if (r.newBadges.length) extra += `<p>Neues Abzeichen:</p>` + r.newBadges.map(b => `<span class="newbadge">${b.icon} ${esc(b.name)}</span>`).join("");
   $("#rExtra").innerHTML = extra;
 
-  const hasNext = isLesson && r.cfg.idx < LESSONS.length - 1 && isUnlocked(r.cfg.idx + 1);
+  const hasNext = isLesson && r.cfg.idx < LESSONS.length - 1 && isUnlocked(data, r.cfg.idx + 1, EMBED);
   const nextBtn = $("#rNext"), againBtn = $("#rAgain");
   nextBtn.hidden = !hasNext;
   againBtn.className = hasNext ? "btn" : "btn primary";
@@ -601,15 +398,9 @@ $("#trainBack").onclick = () => abortRun();
 $("#rHome").onclick = () => show("home");
 $("#layoutClose").onclick = () => { $("#layoutBanner").hidden = true; };
 
-const sentencesText = () => pickSentences(SENTENCES.concat(PUNCT_SENTENCES, NUM_SENTENCES), 260).join(" ");
 $("#freeSentences").onclick = () => startTraining({ mode:"sentences", title:"Ganze Sätze", text:sentencesText(), regen:sentencesText });
-function problemText() {
-  const chars = problemChars().map(([c]) => c);
-  const all = new Set(Object.keys(KEYMAP));
-  const words = LOWER_WORDS.filter(w => chars.some(c => w.includes(c)));
-  return drillFor(chars).slice(0, 8).concat(sampleWords(words.length ? words : LOWER_WORDS, [], 150, all)).join(" ");
-}
-$("#freeProblem").onclick = () => { if (problemChars().length) startTraining({ mode:"problem", title:"Problemtasten", text:problemText(), regen:problemText }); };
+const currentProblemText = () => problemText(data);
+$("#freeProblem").onclick = () => { if (problemChars(data).length) startTraining({ mode:"problem", title:"Problemtasten", text:currentProblemText(), regen:currentProblemText }); };
 $("#customText").addEventListener("input", e => { data.customText = e.target.value; save(); });
 $("#freeCustom").onclick = () => {
   const { text, removed } = normalizeCustom($("#customText").value);
