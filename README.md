@@ -70,3 +70,23 @@ Nachrichten (`source: "zehnfinger"`, Version `v: 1`):
 Ohne `?embed=1` (GitHub Pages, lokale Datei) ändert sich nichts. Das Lernportal kopiert die Dateien mit `npm run zehnfinger:sync` aus diesem Ordner nach `public/zehnfinger/` (ohne `sw.js`).
 **Integrationshinweis:** Diese Kopie verwendet eine feste Dateiliste. Dort muss auch `logic.js`
 ergänzt werden; die Änderung im Lernportal erfolgt in einem separaten Auftrag.
+
+## Barrierefreiheit
+
+Die Ansichten haben Hauptbereiche und fokussierbare Überschriften. Tab wechselt zwischen
+Bedienelementen; Escape bricht das Training ab. Getippt wird auf der Trainingsüberschrift
+oder im fokussierten Übungstext. Browser-Shortcuts bleiben frei; AltGr-Zeichen sind erlaubt.
+Eine höfliche Live-Region meldet Resultate, Abbruch und Eingabefehler, ohne jeden Anschlag
+vorzulesen. Nächster Buchstabe und Finger stehen als Text bereit; Tastatur und Hände sind
+für Screenreader ausgeblendet. Sterne, Abzeichenstatus und Diagrammwerte haben Textalternativen.
+
+Die Einstellungen bieten grössere Übungsschrift. Helle und dunkle Textfarben werden auf
+mindestens 4,5:1 geprüft; Unterstreichungen unterscheiden korrekte, korrigierte und falsche
+Zeichen zusätzlich zur Farbe. Reduzierte Bewegung wird respektiert, Karten umbrechen auch
+bei schmalen Ansichten. Nach einmaligem Online-Laden mit aktivem Service Worker sind alle
+lokalen Startdateien und Icons offline verfügbar. Google Fonts ist optional; offline greift
+die Systemschrift. Im Lernportal wird kein Service Worker registriert.
+
+Offen: echte Prüfungen mit Screenreader (einschliesslich dessen Eingabemodus), 200-%-Zoom,
+Betriebssystem-Kontrastmodus und Service-Worker-Lebenszyklus in Chrome/Firefox/Safari.
+Die Node-Tests simulieren DOM und Cache; sie bestätigen keine vollständige WCAG-Konformität.

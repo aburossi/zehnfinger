@@ -12,6 +12,8 @@ function browser({ embed = false, sources } = {}) {
   function element() {
     const classes = new Set();
     return {
+      focus() { document.activeElement = this; },
+      setAttribute(name, value) { this[name] = value; },
       hidden:false, style:{ setProperty() {} }, children:[], childNodes:[], value:"", textContent:"",
       classList:{ add(...c) { c.forEach(v => classes.add(v)); }, remove(...c) { c.forEach(v => classes.delete(v)); },
         toggle(c, on) { if (on) classes.add(c); else classes.delete(c); } },
@@ -58,7 +60,7 @@ function browser({ embed = false, sources } = {}) {
       listeners.message({ origin:location.origin, source:parent,
         data:{ source:"zehnfinger-host", type:"init", state }, ...overrides });
     },
-    type(key) { listeners.keydown({ key, code:"", preventDefault() {} }); },
+    type(key, options = {}) { listeners.keydown({ key, code:"", preventDefault() {}, ...options }); },
     flush(ms) { for (const t of timers.splice(0)) if (!t.cancelled && t.ms === ms) t.callback(); }
   };
 }

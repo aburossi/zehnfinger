@@ -4,3 +4,5 @@ require("./logic.test.js");
 require("./browser.test.js");
 require("./spiele.test.js");
 require("./content.test.js");
+
+require("./a11y.test.js");
